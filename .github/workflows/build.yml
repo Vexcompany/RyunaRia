@@ -28,15 +28,30 @@ jobs:
 
       - name: Assemble PSP UMD image
         run: |
-          rm -rf iso-root dist
-          mkdir -p iso-root/PSP_GAME/SYSDIR dist
+          rm -rf iso-root dist /tmp/pbp-unpacked
+          mkdir -p iso-root/PSP_GAME/SYSDIR dist /tmp/pbp-unpacked
 
-          # A PSP homebrew PBP contains the same executable payload we need
-          # for the UMD-style homebrew ISO. Keep generated packaging files out
-          # of the repository.
-          unpack-pbp EBOOT.PBP -o /tmp/pbp-unpacked
+          # Extract the PBP sections; unpack-pbp writes the sections to its
+          # current directory rather than accepting an output-directory flag.
+          cd /tmp/pbp-unpacked
+          unpack-pbp "$GITHUB_WORKSPACE/EBOOT.PBP"
+          cd "$GITHUB_WORKSPACE"
+
+          # A homebrew PRX becomes the executable payload of the UMD-style
+          # image. The ISO receives a game-category PARAM.SFO rather than the
+          # Memory Stick homebrew category used by EBOOT.PBP.
           cp /tmp/pbp-unpacked/PARAM.SFO iso-root/PSP_GAME/PARAM.SFO
           cp RyunaRia.prx iso-root/PSP_GAME/SYSDIR/EBOOT.BIN
+          mksfoex \
+            -s CATEGORY=UG \
+            -s DISC_ID=RUNA00001 \
+            -s DISC_VERSION=1.00 \
+            -s PSP_SYSTEM_VER=1.00 \
+            -d BOOTABLE=1 \
+            -d DISC_NUMBER=1 \
+            -d DISC_TOTAL=1 \
+            -d REGION=0x8000 \
+            "Ryuna Ria" iso-root/PSP_GAME/PARAM.SFO
 
           /opt/dotnet/umdgen create iso-root dist/RyunaRia.iso --label RYUNARIA --padding umd
           /opt/dotnet/umdgen verify dist/RyunaRia.iso
