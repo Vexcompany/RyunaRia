@@ -1,6 +1,9 @@
 TARGET = RyunaRia
 OBJS = src/main.o
 
+# PSPDEV containers expose PSPDEV; PSPSDK may not be exported by default.
+PSPSDK ?= $(PSPDEV)/psp/sdk
+
 CFLAGS = -O2 -G0 -Wall -Wextra -Isrc -Iinclude
 CXXFLAGS = $(CFLAGS) -fno-exceptions -fno-rtti
 
