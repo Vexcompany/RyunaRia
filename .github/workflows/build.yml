@@ -1,80 +1,96 @@
-name: Build Ryuna Ria
+name: Build Ryuna Ria ISO
 
 on:
   push:
-    branches: [main]
+    branches:
+      - '**'
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
-    container:
-      image: pspdev/pspdev:latest
-      env:
-        PSPDEV: /usr/local/pspdev
-        PSPSDK: /usr/local/pspdev/psp/sdk
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v7
 
-      - name: Verify PSP toolchain
+      - name: Generate UMD disc metadata and XMB icon
         run: |
-          test -f "$PSPSDK/lib/build.mak"
-          command -v make
-          command -v unpack-pbp
-          command -v mksfoex
+          rm -rf iso-root dist ICON0.PNG
+          mkdir -p iso-root/PSP_GAME/SYSDIR dist
+          python3 tools/package_assets.py ICON0.PNG iso-root/UMD_DATA.BIN RUNA00001
+          cp ICON0.PNG iso-root/PSP_GAME/ICON0.PNG
+          test -s iso-root/PSP_GAME/ICON0.PNG
+          test -s iso-root/UMD_DATA.BIN
 
-      - name: Install ISO packaging prerequisites
+      - name: Compile C source with PSPDEV toolchain
         run: |
-          if command -v apt-get >/dev/null 2>&1; then
-            apt-get update
-            apt-get install -y git curl ca-certificates
-          elif command -v pacman >/dev/null 2>&1; then
-            pacman -Sy --noconfirm git curl ca-certificates
-          elif command -v apk >/dev/null 2>&1; then
-            apk add --no-cache git curl ca-certificates icu-libs icu-data-full
-          else
-            echo "No supported package manager found in PSPDEV container" >&2
-            exit 1
-          fi
-          curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
-          bash /tmp/dotnet-install.sh --channel 9.0 --install-dir /opt/dotnet
+          docker run --rm \
+            -u "$(id -u):$(id -g)" \
+            -v "$GITHUB_WORKSPACE:/work" \
+            -w /work \
+            -e PSPDEV=/usr/local/pspdev \
+            -e PSPSDK=/usr/local/pspdev/psp/sdk \
+            pspdev/pspdev:latest \
+            sh -ec '
+              export PATH="$PSPDEV/bin:$PATH"
+              test -f "$PSPSDK/lib/build.mak"
+              command -v psp-gcc
+              command -v mksfoex
+              make clean all
+              test -s RyunaRia.prx
+              test -s EBOOT.PBP
+              mksfoex \
+                -s CATEGORY=UG \
+                -s DISC_ID=RUNA00001 \
+                -s DISC_VERSION=1.00 \
+                -s PSP_SYSTEM_VER=5.00 \
+                -d BOOTABLE=1 \
+                -d DISC_NUMBER=1 \
+                -d DISC_TOTAL=1 \
+                -d REGION=0x8000 \
+                -d MEMSIZE=1 \
+                "Ryuna Ria" iso-root/PSP_GAME/PARAM.SFO
+              cp RyunaRia.prx iso-root/PSP_GAME/SYSDIR/EBOOT.BIN
+              cp RyunaRia.prx iso-root/PSP_GAME/SYSDIR/BOOT.BIN
+            '
+          test -s iso-root/PSP_GAME/PARAM.SFO
+          test -s iso-root/PSP_GAME/SYSDIR/EBOOT.BIN
+          test -s iso-root/PSP_GAME/SYSDIR/BOOT.BIN
+
+      - name: Set up .NET 9 SDK
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Build UMDGenCLI and assemble PSP .iso
+        run: |
+          rm -rf /tmp/umdgencli /tmp/umdgen
           git clone --depth 1 https://github.com/quickstraw/UMDGenCLI.git /tmp/umdgencli
-          /opt/dotnet/dotnet publish /tmp/umdgencli/UMDGenCLI.csproj -c Release -r linux-musl-x64 --self-contained true -p:PublishSingleFile=true -o /opt/umdgen
-          test -x /opt/umdgen/UMDGenCLI
+          dotnet publish /tmp/umdgencli/UMDGenCLI.csproj \
+            -c Release \
+            -r linux-x64 \
+            --self-contained false \
+            -o /tmp/umdgen
+          test -x /tmp/umdgen/umdgen
 
-      - name: Assemble and verify PSP ISO
-        run: |
-          rm -rf iso-root dist /tmp/pbp-unpacked
-          mkdir -p iso-root/PSP_GAME/SYSDIR dist /tmp/pbp-unpacked
-
-          cd /tmp/pbp-unpacked
-          unpack-pbp "$GITHUB_WORKSPACE/EBOOT.PBP"
-          cd "$GITHUB_WORKSPACE"
-
-          test -s RyunaRia.prx
-          mksfoex \
-            -s CATEGORY=UG \
-            -s DISC_ID=RUNA00001 \
-            -s DISC_VERSION=1.00 \
-            -s PSP_SYSTEM_VER=1.00 \
-            -d BOOTABLE=1 \
-            -d DISC_NUMBER=1 \
-            -d DISC_TOTAL=1 \
-            -d REGION=0x8000 \
-            "Ryuna Ria" iso-root/PSP_GAME/PARAM.SFO
-          cp RyunaRia.prx iso-root/PSP_GAME/SYSDIR/EBOOT.BIN
-
-          /opt/umdgen/UMDGenCLI create iso-root dist/RyunaRia.iso --label RYUNARIA --padding umd
-          /opt/umdgen/UMDGenCLI verify dist/RyunaRia.iso
+          /tmp/umdgen/umdgen create iso-root dist/RyunaRia.iso --label RYUNARIA --padding umd
+          /tmp/umdgen/umdgen verify dist/RyunaRia.iso
+          /tmp/umdgen/umdgen info dist/RyunaRia.iso
           test -s dist/RyunaRia.iso
 
       - name: Upload only the game ISO
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: RyunaRia
           path: dist/RyunaRia.iso
