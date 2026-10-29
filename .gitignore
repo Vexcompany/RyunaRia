@@ -1,0 +1,24 @@
+# PSPSDK build outputs
+*.o
+*.d
+*.elf
+*.prx
+*.SFO
+*.PBP
+ICON0.PNG
+PIC0.PNG
+PIC1.PNG
+SND0.AT3
+
+# ISO packaging & release artifacts
+*.iso
+*.cso
+*.dax
+iso-root/
+dist/
+umdgen.state
+
+# Editor / OS scratch files
+.DS_Store
+*~
+*.swp
