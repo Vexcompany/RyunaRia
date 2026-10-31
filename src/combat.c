@@ -214,14 +214,14 @@ static void spawn_monster_slot(GameState *gs, int slot, ZoneId zone, int force_e
 
     m->traits = roll_spawn_adaptations(gs, m->kind, zone, m->is_elite);
     if (m->traits & ADAPT_PURSUER) {
-        m->move_speed *= 1.32f;
+        m->move_speed *= 1.18f;
     }
     if (m->traits & ADAPT_FRENZY) {
         m->atk = (m->atk * 5) / 4;
     }
 
     m->hp = m->max_hp;
-    m->attack_cd = 0.6f + game_randf(gs) * 0.8f;
+    m->attack_cd = 1.0f + game_randf(gs) * 0.9f;
 }
 
 void combat_init(GameState *gs) {
@@ -545,7 +545,7 @@ void combat_update(GameState *gs, const InputState *in, float dt) {
         Monster *lm = &gs->monsters[gs->locked_monster];
         float dx = lm->wx - p->wx;
         float dy = lm->wy - p->wy;
-        if (!lm->active || (dx * dx + dy * dy > 13.5f * 13.5f)) {
+        if (!lm->active || (dx * dx + dy * dy > 9.0f * 9.0f)) {
             gs->locked_monster = -1;
         }
     }
@@ -798,7 +798,7 @@ void combat_update(GameState *gs, const InputState *in, float dt) {
         float dy = p->wy - m->wy;
         float dist = sqrtf(dx * dx + dy * dy);
 
-        if (player_safe || dist > 10.5f) {
+        if (player_safe || dist > 7.5f) {
             m->windup_timer = 0.0f;
             float hdx = m->spawn_wx - m->wx;
             float hdy = m->spawn_wy - m->wy;
@@ -816,7 +816,7 @@ void combat_update(GameState *gs, const InputState *in, float dt) {
             m->windup_timer -= dt;
             if (m->windup_timer <= 0.0f) {
                 m->windup_timer = 0.0f;
-                m->attack_cd = (m->traits & ADAPT_FRENZY) ? 0.85f : 1.25f;
+                m->attack_cd = (m->traits & ADAPT_FRENZY) ? 1.45f : 1.85f;
 
                 if (m->kind == MON_WEAVER) {
                     if (dist > 0.05f) {
@@ -830,20 +830,20 @@ void combat_update(GameState *gs, const InputState *in, float dt) {
                         spawn_projectile(gs, 0, m->wx, m->wy, cosf(ang), sinf(ang),
                                          5.6f, 1.7f, m->atk, RGBA8(255, 130, 80, 255), 0.38f, 0);
                     }
-                    if (dist <= 2.35f) {
+                    if (dist <= 1.90f) {
                         damage_player(gs, m, m->atk + 4);
                     }
                 } else if (m->kind == MON_GOLEM) {
-                    if (dist <= 2.25f) {
+                    if (dist <= 1.80f) {
                         damage_player(gs, m, m->atk + 3);
                     }
                 } else {
                     /* Stalker lunge strike */
-                    float lunge_step = (m->traits & ADAPT_PURSUER) ? 1.15f : 0.78f;
+                    float lunge_step = (m->traits & ADAPT_PURSUER) ? 0.90f : 0.62f;
                     world_move_slide(gs, &m->wx, &m->wy, m->lunge_vx * lunge_step, m->lunge_vy * lunge_step, 0.36f);
                     float ndx = p->wx - m->wx;
                     float ndy = p->wy - m->wy;
-                    if (ndx * ndx + ndy * ndy <= 1.45f * 1.45f) {
+                    if (ndx * ndx + ndy * ndy <= 1.25f * 1.25f) {
                         damage_player(gs, m, m->atk);
                     }
                 }
@@ -852,10 +852,10 @@ void combat_update(GameState *gs, const InputState *in, float dt) {
         }
 
         /* Chase / Kite AI & Initiate Telegraph */
-        float trig_range = (m->kind == MON_WEAVER) ? 5.8f
-                         : (m->kind == MON_WARDEN) ? 3.8f
-                         : (m->kind == MON_GOLEM)  ? 1.85f
-                         : ((m->traits & ADAPT_PURSUER) ? 2.35f : 1.75f);
+        float trig_range = (m->kind == MON_WEAVER) ? 3.60f
+                         : (m->kind == MON_WARDEN) ? 2.80f
+                         : (m->kind == MON_GOLEM)  ? 1.55f
+                         : ((m->traits & ADAPT_PURSUER) ? 1.85f : 1.55f);
 
         if (m->kind == MON_WEAVER && dist < 2.6f && dist > 0.05f) {
             /* Weaver kites away from Ryuna */
@@ -872,11 +872,11 @@ void combat_update(GameState *gs, const InputState *in, float dt) {
         }
 
         if (dist <= trig_range && m->attack_cd <= 0.0f) {
-            float base_windup = (m->kind == MON_GOLEM) ? 0.66f
-                              : (m->kind == MON_WARDEN) ? 0.62f
-                              : (m->kind == MON_WEAVER) ? 0.50f : 0.42f;
+            float base_windup = (m->kind == MON_GOLEM) ? 1.00f
+                              : (m->kind == MON_WARDEN) ? 0.95f
+                              : (m->kind == MON_WEAVER) ? 0.90f : 0.78f;
             if (m->traits & ADAPT_FRENZY) {
-                base_windup *= 0.78f;
+                base_windup *= 0.90f;
             }
             m->windup_total = base_windup;
             m->windup_timer = base_windup;

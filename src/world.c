@@ -161,14 +161,30 @@ int world_point_blocked(const GameState *gs, float wx, float wy, float radius) {
         for (int tx = min_x; tx <= max_x; tx++) {
             if (tx < 0 || ty < 0 || tx >= MAP_SIZE || ty >= MAP_SIZE) return 1;
             TileType t = (TileType)gs->tiles[ty][tx];
-            if (world_tile_solid(t)) {
+            float dx = wx - ((float)tx + 0.5f);
+            float dy = wy - ((float)ty + 0.5f);
+
+            if (t == TILE_WATER_CHASM) {
+                /* Chasms occupy the full tile and remain completely impassable. */
                 return 1;
             }
-            /* Center shrine obelisk column */
+            if (t == TILE_WALL_PILLAR || t == TILE_CRYSTAL_SPIRE) {
+                /*
+                 * Match collision to the visible structure footprint instead of
+                 * blocking its entire tile square. The old full-cell test made
+                 * nearby walkable floor feel like an invisible wall.
+                 */
+                float obstacle_radius = (t == TILE_CRYSTAL_SPIRE) ? 0.30f : 0.27f;
+                float combined = obstacle_radius + radius;
+                if (dx * dx + dy * dy < combined * combined) {
+                    return 1;
+                }
+            }
+
+            /* Center shrine obelisk: keep its collision close to the visible base. */
             if (tx == MAP_SIZE / 2 && ty == MAP_SIZE / 2) {
-                float dx = wx - ((float)tx + 0.5f);
-                float dy = wy - ((float)ty + 0.5f);
-                if (dx * dx + dy * dy < (0.38f + radius) * (0.38f + radius)) {
+                float combined = 0.27f + radius;
+                if (dx * dx + dy * dy < combined * combined) {
                     return 1;
                 }
             }
